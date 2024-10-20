@@ -17,7 +17,7 @@ We’ve created a **convenient script** that simplifies the process of downloadi
 This automation ensures a **quick recovery or setup** for your nodes using the latest snapshots available. You can run the script directly by using the following command:
 
 ```bash
-curl -s https://raw.githubusercontent.com/encapsulate-xyz/story-snapshot-script/refs/heads/main/node_tui.sh | bash
+curl -s https://raw.githubusercontent.com/encapsulate-xyz/story-snapshot-script/refs/heads/main/get_snapshot.sh | bash
 ```
 ## Visual Overview
 
