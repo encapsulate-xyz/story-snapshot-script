@@ -3,6 +3,12 @@
 # Enable error handling
 set -e
 
+# Snapshot URLs
+ARCHIVAL_GETH_SNAPSHOT="https://snapshot.encapsulate.xyz/story/archive/story_geth_snapshot_archive.lz4"
+ARCHIVAL_STORY_SNAPSHOT="https://snapshot.encapsulate.xyz/story/archive/story_snapshot_archive.lz4"
+PRUNED_GETH_SNAPSHOT="https://snapshot.encapsulate.xyz/story/pruned/story_geth_snapshot_pruned.lz4"
+PRUNED_STORY_SNAPSHOT="https://snapshot.encapsulate.xyz/story/pruned/story_snapshot_pruned.lz4"
+
 # Variables for default service names
 DEFAULT_EXEC_SERVICE="story-geth"
 DEFAULT_CONSENSUS_SERVICE="story"
@@ -32,30 +38,33 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# Set URLs based on snapshot type
-if [ "$SNAPSHOT_TYPE" == "Pruned" ]; then
-  GETH_URL="https://snapshot.encapsulate.xyz/story/pruned/story_geth_snapshot_pruned.lz4"
-  CONSENSUS_URL="https://snapshot.encapsulate.xyz/story/pruned/story_snapshot_pruned.lz4"
-elif [ "$SNAPSHOT_TYPE" == "Archive" ]; then
-  GETH_URL="https://snapshot.encapsulate.xyz/story/archive/story_geth_snapshot_archive.lz4"
-  CONSENSUS_URL="https://snapshot.encapsulate.xyz/story/archive/story_snapshot_archive.lz4"
-else
-  log "Invalid snapshot type. Exiting."
-  exit 1
-fi
-
 log "Selected $SNAPSHOT_TYPE snapshot."
 
 # Update system and install dependencies
 log "Updating system and installing prerequisites..."
 sudo apt update
-sudo apt install snapd -y
-sudo snap install lz4
+sudo apt install lz4 -y
 
 # Stop services
 log "Stopping services: $EXEC_SERVICE and $CONSENSUS_SERVICE..."
 sudo systemctl stop "$EXEC_SERVICE"
 sudo systemctl stop "$CONSENSUS_SERVICE"
+
+# Backup priv_validator_state.json
+log "Backing up priv_validator_state.json..."
+cp ~/.story/story/data/priv_validator_state.json ~/.story/story/priv_validator_state.json.backup
+
+# Download snapshots based on snapshot type
+if [ "$SNAPSHOT_TYPE" == "Pruned" ]; then
+  wget $PRUNED_GETH_SNAPSHOT -O geth_snapshot.lz4
+  wget $PRUNED_STORY_SNAPSHOT -O story_snapshot.lz4
+elif [ "$SNAPSHOT_TYPE" == "Archive" ]; then
+  wget $ARCHIVAL_GETH_SNAPSHOT -O geth_snapshot.lz4
+  wget $ARCHIVAL_STORY_SNAPSHOT -O story_snapshot.lz4
+else
+  log "Invalid snapshot type. Exiting."
+  exit 1
+fi
 
 # Remove existing data
 log "Removing old execution data..."
@@ -64,16 +73,19 @@ sudo rm -rf "$HOME/.story/geth/iliad/geth/chaindata"
 log "Removing old consensus data..."
 sudo rm -rf "$HOME/.story/story/data"
 
-# Download and extract snapshots
-log "Downloading and extracting execution snapshot..."
-cd "$HOME/.story/geth/iliad/geth"
-curl -o - -L "$GETH_URL" | lz4 -c -d - | tar -x
-log "Execution snapshot extracted successfully."
+# Extract snapshots
+log "Extracting execution snapshot..."
+lz4 -d geth_snapshot.lz4 | tar -C ~/.story/geth/iliad/geth -xv
 
-log "Downloading and extracting consensus snapshot..."
-cd "$HOME/.story/story"
-curl -o - -L "$CONSENSUS_URL" | lz4 -c -d - | tar -x
-log "Consensus snapshot extracted successfully."
+log "Extracting consensus snapshot..."
+lz4 -d story_snapshot.lz4 | tar -C ~/.story/story -xv
+
+log "Removing snapshot files..."
+rm -rf geth_snapshot.lz4 story_snapshot.lz4
+
+# Restore priv_validator_state.json
+log "Restoring priv_validator_state.json..."
+mv ~/.story/story/priv_validator_state.json.backup ~/.story/story/data/priv_validator_state.json
 
 # Restart services
 log "Restarting services: $EXEC_SERVICE and $CONSENSUS_SERVICE..."
